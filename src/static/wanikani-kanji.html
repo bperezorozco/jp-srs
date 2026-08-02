@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>WaniKani (Vocab) — Kotonoha 言の葉</title>
+  <title>WaniKani (Kanji) — Kotonoha 言の葉</title>
   <style>
     body {
       font-family: -apple-system, sans-serif;
@@ -61,10 +61,10 @@
 </head>
 <body>
   <div class="header">
-    <h1>WaniKani (Vocab) 言の葉</h1>
+    <h1>WaniKani (Kanji) 言の葉</h1>
   </div>
   <a class="nav-link" id="app-link" href="/app">← Kotonoha</a>
-  <a class="nav-link" href="/wanikani-kanji">WaniKani (Kanji) →</a>
+  <a class="nav-link" href="/wanikani">← WaniKani (Vocab)</a>
 
   <select id="language">
     <option value="es" selected>Español (México)</option>
@@ -101,36 +101,36 @@
     const STRINGS = {
       es: {
         noApiKey: "No hay API key de WaniKani configurada.",
-        searchPlaceholder: "Buscar palabra...",
-        loading: "Cargando vocabulario...",
-        loadError: "No se pudo cargar el vocabulario de WaniKani.",
+        searchPlaceholder: "Buscar kanji...",
+        loading: "Cargando kanji...",
+        loadError: "No se pudieron cargar los kanji de WaniKani.",
         secretPrompt: "Ingresa el secreto de la app:",
         secretIncorrect: "Secreto incorrecto, intenta de nuevo.",
         levels: { N5: "Principiante", N4: "Elemental", N3: "Intermedio", N2: "Intermedio Alto", N1: "Avanzado" },
       },
       en: {
         noApiKey: "No WaniKani API key configured.",
-        searchPlaceholder: "Search word...",
-        loading: "Loading vocabulary...",
-        loadError: "Couldn't load WaniKani vocabulary.",
+        searchPlaceholder: "Search kanji...",
+        loading: "Loading kanji...",
+        loadError: "Couldn't load WaniKani kanji.",
         secretPrompt: "Enter the app secret:",
         secretIncorrect: "Incorrect secret, try again.",
         levels: { N5: "Beginner", N4: "Elementary", N3: "Intermediate", N2: "Upper Intermediate", N1: "Advanced" },
       },
       it: {
         noApiKey: "Nessuna API key di WaniKani configurata.",
-        searchPlaceholder: "Cerca parola...",
-        loading: "Caricamento vocabolario...",
-        loadError: "Impossibile caricare il vocabolario di WaniKani.",
+        searchPlaceholder: "Cerca kanji...",
+        loading: "Caricamento kanji...",
+        loadError: "Impossibile caricare i kanji di WaniKani.",
         secretPrompt: "Inserisci il segreto dell'app:",
         secretIncorrect: "Segreto errato, riprova.",
         levels: { N5: "Principiante", N4: "Elementare", N3: "Intermedio", N2: "Intermedio Avanzato", N1: "Avanzato" },
       },
       fr: {
         noApiKey: "Aucune clé API WaniKani configurée.",
-        searchPlaceholder: "Rechercher un mot...",
-        loading: "Chargement du vocabulaire...",
-        loadError: "Impossible de charger le vocabulaire WaniKani.",
+        searchPlaceholder: "Rechercher un kanji...",
+        loading: "Chargement des kanji...",
+        loadError: "Impossible de charger les kanji WaniKani.",
         secretPrompt: "Entrez le secret de l'application :",
         secretIncorrect: "Secret incorrect, réessayez.",
         levels: { N5: "Débutant", N4: "Élémentaire", N3: "Intermédiaire", N2: "Intermédiaire Supérieur", N1: "Avancé" },
@@ -187,6 +187,7 @@
               level: item.jlpt_level,
               lang: language,
               autorun: "1",
+              is_kanji: "1",
             });
             window.location.href = `/app?${params.toString()}`;
           });
@@ -220,7 +221,7 @@
       }
 
       try {
-        const res = await fetch("/wanikani/words", {
+        const res = await fetch("/wanikani/kanji", {
           headers: { "X-App-Secret": secret },
         });
 

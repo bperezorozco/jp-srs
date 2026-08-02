@@ -63,11 +63,22 @@ def build_system(level: str) -> str:
         "después, sin markdown, sin backticks."
     )
 
-def build_prompt(word: str, language: str) -> str:
+def build_prompt(word: str, language: str, is_kanji: bool = False) -> str:
     lang_name = LANGUAGES[language]
+    if is_kanji:
+        target = (
+            f"Kanji objetivo: {word}\n\n"
+            "Genera una oración de ejemplo usando una palabra que contenga "
+            "este kanji (el kanji no tiene que funcionar como palabra por "
+            "sí solo)."
+        )
+    else:
+        target = (
+            f"Palabra objetivo: {word}\n\n"
+            "Genera una oración de ejemplo usando esta palabra."
+        )
     return (
-        f"Palabra objetivo: {word}\n\n"
-        "Genera una oración de ejemplo usando esta palabra. "
+        f"{target} "
         "Devuelve exactamente este JSON, sin nada más:\n"
         "{\n"
         '  "sentence": "oración completa en japonés con kanji",\n'
@@ -120,32 +131,35 @@ async def _paginate(client: httpx.AsyncClient, url: str) -> list[dict]:
         url = data["pages"]["next_url"]
     return items
 
-# Los subjects (palabras + nivel WK) cambian muy poco -> se cachean en
-# memoria. Los assignments (progreso SRS) cambian con cada review del
-# usuario, así que esos se piden frescos en cada request.
-_wanikani_subjects_cache: list[dict] | None = None
+WANIKANI_VOCAB_TYPES = "vocabulary,kana_vocabulary"
+WANIKANI_KANJI_TYPES = "kanji"
 
-async def fetch_wanikani_subjects(client: httpx.AsyncClient) -> list[dict]:
-    global _wanikani_subjects_cache
-    if _wanikani_subjects_cache is not None:
-        return _wanikani_subjects_cache
+# Los subjects (palabras/kanji + nivel WK) cambian muy poco -> se cachean
+# en memoria, por tipo. Los assignments (progreso SRS) cambian con cada
+# review del usuario, así que esos se piden frescos en cada request.
+_wanikani_subjects_cache: dict[str, list[dict]] = {}
 
-    raw = await _paginate(client, "https://api.wanikani.com/v2/subjects?types=vocabulary,kana_vocabulary")
-    _wanikani_subjects_cache = [
+async def fetch_wanikani_subjects(client: httpx.AsyncClient, types: str) -> list[dict]:
+    if types in _wanikani_subjects_cache:
+        return _wanikani_subjects_cache[types]
+
+    raw = await _paginate(client, f"https://api.wanikani.com/v2/subjects?types={types}")
+    subjects = [
         {"id": s["id"], "word": s["data"]["characters"], "level": s["data"]["level"]}
         for s in raw
         if s["data"]["characters"]
     ]
-    return _wanikani_subjects_cache
+    _wanikani_subjects_cache[types] = subjects
+    return subjects
 
-async def fetch_wanikani_srs_stages(client: httpx.AsyncClient) -> dict[int, int]:
-    raw = await _paginate(client, "https://api.wanikani.com/v2/assignments?subject_types=vocabulary,kana_vocabulary")
+async def fetch_wanikani_srs_stages(client: httpx.AsyncClient, types: str) -> dict[int, int]:
+    raw = await _paginate(client, f"https://api.wanikani.com/v2/assignments?subject_types={types}")
     return {a["data"]["subject_id"]: a["data"]["srs_stage"] for a in raw}
 
-async def fetch_wanikani_words() -> list[dict]:
+async def fetch_wanikani_items(types: str) -> list[dict]:
     async with httpx.AsyncClient() as client:
-        subjects = await fetch_wanikani_subjects(client)
-        srs_stages = await fetch_wanikani_srs_stages(client)
+        subjects = await fetch_wanikani_subjects(client, types)
+        srs_stages = await fetch_wanikani_srs_stages(client, types)
 
     return [
         {
@@ -170,20 +184,31 @@ def serve_app():
 def serve_wanikani():
     return FileResponse(os.path.join(STATIC_DIR, "wanikani.html"))
 
+@app.get("/wanikani-kanji")
+def serve_wanikani_kanji():
+    return FileResponse(os.path.join(STATIC_DIR, "wanikani-kanji.html"))
+
 @app.get("/wanikani/words", dependencies=[Depends(check_auth)])
 async def wanikani_words():
     if not WANIKANI_API_KEY:
         raise HTTPException(status_code=404, detail="No hay API key de WaniKani configurada")
-    words = await fetch_wanikani_words()
+    words = await fetch_wanikani_items(WANIKANI_VOCAB_TYPES)
+    return {"words": words}
+
+@app.get("/wanikani/kanji", dependencies=[Depends(check_auth)])
+async def wanikani_kanji():
+    if not WANIKANI_API_KEY:
+        raise HTTPException(status_code=404, detail="No hay API key de WaniKani configurada")
+    words = await fetch_wanikani_items(WANIKANI_KANJI_TYPES)
     return {"words": words}
 
 @app.get("/sentence", dependencies=[Depends(check_auth)])
-async def sentence(word: str = "契約", level: str = "N5", language: str = "es"):
+async def sentence(word: str = "契約", level: str = "N5", language: str = "es", is_kanji: bool = False):
     if level not in JLPT_LEVELS:
         raise HTTPException(status_code=400, detail=f"level inválido, debe ser uno de {sorted(JLPT_LEVELS)}")
     if language not in LANGUAGES:
         raise HTTPException(status_code=400, detail=f"language inválido, debe ser uno de {sorted(LANGUAGES)}")
-    raw = await generate(build_prompt(word, language), build_system(level))
+    raw = await generate(build_prompt(word, language, is_kanji), build_system(level))
     try:
         return parse_response(raw)
     except json.JSONDecodeError:

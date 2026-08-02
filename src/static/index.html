@@ -78,7 +78,8 @@
     <div class="poem-col">言の葉や<br>一つ一つ<br>心に降る</div>
     <div class="poem-col" id="poem-translated"></div>
   </div>
-  <a class="nav-link" id="wanikani-link" href="/wanikani">WaniKani →</a>
+  <a class="nav-link" id="wanikani-link" href="/wanikani">WaniKani (Vocab) →</a>
+  <a class="nav-link" id="wanikani-kanji-link" href="/wanikani-kanji">WaniKani (Kanji) →</a>
   <input type="text" id="word" placeholder="単語を入力" autofocus>
   <div class="options">
     <select id="level">
@@ -163,6 +164,8 @@
       return secret;
     }
 
+    let isKanji = false;
+
     async function generate() {
       const word = document.getElementById("word").value.trim();
       const errorEl = document.getElementById("error");
@@ -179,10 +182,12 @@
       const language = document.getElementById("language").value;
 
       try {
-        const res = await fetch(
-          `/sentence?word=${encodeURIComponent(word)}&level=${encodeURIComponent(level)}&language=${encodeURIComponent(language)}`,
-          { headers: { "X-App-Secret": secret } }
-        );
+        const params = new URLSearchParams({
+          word, level, language, is_kanji: isKanji ? "1" : "0",
+        });
+        const res = await fetch(`/sentence?${params.toString()}`, {
+          headers: { "X-App-Secret": secret },
+        });
 
         if (res.status === 401) {
           localStorage.removeItem("appSecret");
@@ -216,6 +221,7 @@
     function updateWanikaniLink() {
       const language = document.getElementById("language").value;
       document.getElementById("wanikani-link").href = `/wanikani?lang=${encodeURIComponent(language)}`;
+      document.getElementById("wanikani-kanji-link").href = `/wanikani-kanji?lang=${encodeURIComponent(language)}`;
     }
 
     function onLanguageChange() {
@@ -243,6 +249,7 @@
       if (word) {
         document.getElementById("word").value = word;
       }
+      isKanji = params.get("is_kanji") === "1";
       return word && params.get("autorun") === "1";
     }
 
