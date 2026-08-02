@@ -139,10 +139,18 @@
       }
     }
 
+    const SECRET_PROMPTS = {
+      es: "Ingresa el secreto de la app:",
+      en: "Enter the app secret:",
+      it: "Inserisci il segreto dell'app:",
+      fr: "Entrez le secret de l'application :",
+    };
+
     function getSecret() {
       let secret = localStorage.getItem("appSecret");
       if (!secret) {
-        secret = prompt("Ingresa el secreto de la app:");
+        const language = document.getElementById("language").value;
+        secret = prompt(SECRET_PROMPTS[language]);
         if (secret) localStorage.setItem("appSecret", secret);
       }
       return secret;
