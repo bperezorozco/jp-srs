@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>jp-srs</title>
+  <style>
+    body {
+      font-family: -apple-system, sans-serif;
+      max-width: 480px;
+      margin: 40px auto;
+      padding: 0 20px;
+    }
+    input[type=text] {
+      width: 100%;
+      font-size: 1.5rem;
+      padding: 12px;
+      box-sizing: border-box;
+    }
+    button {
+      width: 100%;
+      font-size: 1.1rem;
+      padding: 12px;
+      margin-top: 10px;
+    }
+    .card {
+      margin-top: 24px;
+      padding: 16px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      display: none;
+    }
+    .sentence { font-size: 1.4rem; margin-bottom: 8px; }
+    .furigana { color: #666; font-size: 0.95rem; margin-bottom: 8px; }
+    .translation { margin-bottom: 8px; }
+    .note { font-size: 0.9rem; color: #444; font-style: italic; }
+    .error { color: #c00; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <h2>jp-srs</h2>
+  <input type="text" id="word" placeholder="単語を入力" autofocus>
+  <button id="go">Generar oración</button>
+
+  <div class="card" id="card">
+    <div class="sentence" id="sentence"></div>
+    <div class="furigana" id="furigana"></div>
+    <div class="translation" id="translation"></div>
+    <div class="note" id="note"></div>
+  </div>
+  <div class="error" id="error"></div>
+
+  <script>
+    function getSecret() {
+      let secret = localStorage.getItem("appSecret");
+      if (!secret) {
+        secret = prompt("Ingresa el secreto de la app:");
+        if (secret) localStorage.setItem("appSecret", secret);
+      }
+      return secret;
+    }
+
+    async function generate() {
+      const word = document.getElementById("word").value.trim();
+      const errorEl = document.getElementById("error");
+      const cardEl = document.getElementById("card");
+      errorEl.textContent = "";
+      cardEl.style.display = "none";
+
+      if (!word) return;
+
+      const secret = getSecret();
+      if (!secret) return;
+
+      try {
+        const res = await fetch(
+          `/sentence?word=${encodeURIComponent(word)}`,
+          { headers: { "X-App-Secret": secret } }
+        );
+
+        if (res.status === 401) {
+          localStorage.removeItem("appSecret");
+          errorEl.textContent = "Secreto incorrecto, intenta de nuevo.";
+          return;
+        }
+        if (!res.ok) {
+          errorEl.textContent = `Error del servidor (${res.status})`;
+          return;
+        }
+
+        const data = await res.json();
+        document.getElementById("sentence").textContent = data.sentence;
+        document.getElementById("furigana").textContent = data.furigana;
+        document.getElementById("translation").textContent = data.translation;
+        document.getElementById("note").textContent = data.note || "";
+        cardEl.style.display = "block";
+      } catch (e) {
+        errorEl.textContent = "No se pudo conectar al servidor.";
+      }
+    }
+
+    document.getElementById("go").addEventListener("click", generate);
+    document.getElementById("word").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") generate();
+    });
+  </script>
+</body>
+</html>
+
