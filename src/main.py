@@ -1,5 +1,6 @@
 import os
 import json
+import httpx
 from fastapi import FastAPI, Header, HTTPException, Depends
 from fastapi.responses import FileResponse
 from dotenv import load_dotenv
@@ -92,6 +93,71 @@ def check_auth(x_app_secret: str = Header(None)):
         raise HTTPException(status_code=401)
 
 
+WANIKANI_API_KEY = os.getenv("WANIKANI_API_KEY")
+WANIKANI_HEADERS = {"Authorization": f"Bearer {WANIKANI_API_KEY}"}
+
+# Correspondencia aproximada nivel WaniKani (1-60) -> nivel JLPT.
+# WaniKani no expone nivel JLPT directamente; esto es una heurística
+# basada en el consenso de la comunidad, no una fuente oficial.
+def wanikani_level_to_jlpt(level: int) -> str:
+    if level <= 10:
+        return "N5"
+    if level <= 20:
+        return "N4"
+    if level <= 33:
+        return "N3"
+    if level <= 44:
+        return "N2"
+    return "N1"
+
+async def _paginate(client: httpx.AsyncClient, url: str) -> list[dict]:
+    items = []
+    while url:
+        resp = await client.get(url, headers=WANIKANI_HEADERS)
+        resp.raise_for_status()
+        data = resp.json()
+        items.extend(data["data"])
+        url = data["pages"]["next_url"]
+    return items
+
+# Los subjects (palabras + nivel WK) cambian muy poco -> se cachean en
+# memoria. Los assignments (progreso SRS) cambian con cada review del
+# usuario, así que esos se piden frescos en cada request.
+_wanikani_subjects_cache: list[dict] | None = None
+
+async def fetch_wanikani_subjects(client: httpx.AsyncClient) -> list[dict]:
+    global _wanikani_subjects_cache
+    if _wanikani_subjects_cache is not None:
+        return _wanikani_subjects_cache
+
+    raw = await _paginate(client, "https://api.wanikani.com/v2/subjects?types=vocabulary")
+    _wanikani_subjects_cache = [
+        {"id": s["id"], "word": s["data"]["characters"], "level": s["data"]["level"]}
+        for s in raw
+        if s["data"]["characters"]
+    ]
+    return _wanikani_subjects_cache
+
+async def fetch_wanikani_srs_stages(client: httpx.AsyncClient) -> dict[int, int]:
+    raw = await _paginate(client, "https://api.wanikani.com/v2/assignments?subject_types=vocabulary")
+    return {a["data"]["subject_id"]: a["data"]["srs_stage"] for a in raw}
+
+async def fetch_wanikani_words() -> list[dict]:
+    async with httpx.AsyncClient() as client:
+        subjects = await fetch_wanikani_subjects(client)
+        srs_stages = await fetch_wanikani_srs_stages(client)
+
+    return [
+        {
+            "word": s["word"],
+            "jlpt_level": wanikani_level_to_jlpt(s["level"]),
+            # -1 = todavía no asignada (nivel no alcanzado en WaniKani)
+            "srs_stage": srs_stages.get(s["id"], -1),
+        }
+        for s in subjects
+    ]
+
+
 @app.get("/")
 def root():
     return {"status": "ok", "backend": "api_key" if USE_API_KEY else "claude_code"}
@@ -99,6 +165,17 @@ def root():
 @app.get("/app")
 def serve_app():
     return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+
+@app.get("/wanikani")
+def serve_wanikani():
+    return FileResponse(os.path.join(STATIC_DIR, "wanikani.html"))
+
+@app.get("/wanikani/words", dependencies=[Depends(check_auth)])
+async def wanikani_words():
+    if not WANIKANI_API_KEY:
+        raise HTTPException(status_code=404, detail="No hay API key de WaniKani configurada")
+    words = await fetch_wanikani_words()
+    return {"words": words}
 
 @app.get("/sentence", dependencies=[Depends(check_auth)])
 async def sentence(word: str = "契約", level: str = "N5", language: str = "es"):

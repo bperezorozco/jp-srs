@@ -61,6 +61,12 @@
       line-height: 1.6;
       text-align: center;
     }
+    .nav-link {
+      display: block;
+      text-align: center;
+      font-size: 0.85rem;
+      margin-bottom: 16px;
+    }
   </style>
 </head>
 <body>
@@ -69,9 +75,10 @@
     <div class="headline" id="headline"></div>
   </div>
   <div class="poem">
-    <div class="poem-col">言の葉や<br>一つひとつ<br>心に降る</div>
+    <div class="poem-col">言の葉や<br>一つ一つ<br>心に降る</div>
     <div class="poem-col" id="poem-translated"></div>
   </div>
+  <a class="nav-link" id="wanikani-link" href="/wanikani">WaniKani →</a>
   <input type="text" id="word" placeholder="単語を入力" autofocus>
   <div class="options">
     <select id="level">
@@ -200,18 +207,43 @@
 
     function initLanguageFromUrl() {
       const params = new URLSearchParams(window.location.search);
-      const lang = params.get("lang");
+      const lang = params.get("lang") || localStorage.getItem("appLanguage");
       if (lang && TAGLINES[lang]) {
         document.getElementById("language").value = lang;
       }
     }
 
+    function updateWanikaniLink() {
+      const language = document.getElementById("language").value;
+      document.getElementById("wanikani-link").href = `/wanikani?lang=${encodeURIComponent(language)}`;
+    }
+
     function onLanguageChange() {
       const language = document.getElementById("language").value;
+      localStorage.setItem("appLanguage", language);
       const url = new URL(window.location);
       url.searchParams.set("lang", language);
       history.replaceState(null, "", url);
       updateTagline();
+      updateWanikaniLink();
+    }
+
+    function initLevelFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      const level = params.get("level");
+      const levelSelect = document.getElementById("level");
+      if (level && [...levelSelect.options].some((o) => o.value === level)) {
+        levelSelect.value = level;
+      }
+    }
+
+    function initWordFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      const word = params.get("word");
+      if (word) {
+        document.getElementById("word").value = word;
+      }
+      return word && params.get("autorun") === "1";
     }
 
     document.getElementById("go").addEventListener("click", generate);
@@ -220,7 +252,10 @@
     });
     document.getElementById("language").addEventListener("change", onLanguageChange);
     initLanguageFromUrl();
+    initLevelFromUrl();
     updateTagline();
+    updateWanikaniLink();
+    if (initWordFromUrl()) generate();
   </script>
 </body>
 </html>

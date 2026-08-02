@@ -37,6 +37,33 @@ corporativo y de seguros. Nivel JLPT (N1-N5) e idioma de traducción
   language)` pide la traducción en el idioma pedido. Valores inválidos
   devuelven 400, nunca se le pasan al modelo sin validar.
 
+## Integración WaniKani
+
+- `/wanikani` sirve `src/static/wanikani.html`, una segunda página con
+  todo el vocabulario de WaniKani (todos los niveles, no solo los
+  desbloqueados), agrupado por sección de nivel JLPT (N5 a N1) y con
+  cada botón coloreado según el SRS stage en WaniKani (escala de azules,
+  de "sin asignar" hasta "burned"). Click en una palabra te manda a
+  `/app?word=...&level=...&lang=...&autorun=1`, que precarga la palabra,
+  selecciona el nivel JLPT correspondiente, y genera la oración
+  automáticamente.
+- `/wanikani/words` (protegido por `X-App-Secret`, igual que `/sentence`)
+  usa `WANIKANI_API_KEY` para pegarle a la API v2 de WaniKani: `GET
+  /subjects?types=vocabulary` para las palabras + nivel WK, y `GET
+  /assignments?subject_types=vocabulary` para el SRS stage actual de
+  cada una. Si la env var no está seteada, devuelve 404 y el frontend
+  muestra "No hay API key" en el idioma seleccionado.
+- `wanikani_level_to_jlpt()` mapea nivel WaniKani (1-60) a nivel JLPT
+  (N5-N1) con una heurística aproximada (no oficial, WaniKani no expone
+  JLPT directamente): 1-10→N5, 11-20→N4, 21-33→N3, 34-44→N2, 45-60→N1.
+- Los subjects (palabras + nivel WK) se cachean en memoria
+  (`_wanikani_subjects_cache`) porque cambian muy poco. Los assignments
+  (SRS stage) se piden frescos en cada request porque cambian con cada
+  review — así los colores en `/wanikani` reflejan tu progreso real.
+- El idioma seleccionado se persiste en `localStorage` (`appLanguage`)
+  además del query param `?lang=`, para que se mantenga al navegar
+  entre `/app` y `/wanikani`.
+
 ## Seguridad
 
 - Endpoint `/sentence` protegido por header `X-App-Secret`, comparado
@@ -53,6 +80,8 @@ corporativo y de seguros. Nivel JLPT (N1-N5) e idioma de traducción
 - Start command en `railway.json`, no en el dashboard:
   `uv run uvicorn src.main:app --host 0.0.0.0 --port $PORT`
 - Variables requeridas en Railway: `ANTHROPIC_API_KEY`, `APP_SECRET`, `DB_PATH`
+- Variable opcional: `WANIKANI_API_KEY` (habilita `/wanikani/words`; sin
+  ella, la página de WaniKani muestra "no hay API key")
 - Volume montado en `/data` para persistencia de SQLite (el filesystem
   del contenedor es efímero entre deploys)
 
@@ -81,5 +110,7 @@ corporativo y de seguros. Nivel JLPT (N1-N5) e idioma de traducción
 - [x] Generación en JSON estricto
 - [x] Frontend mínimo (input palabra → oración, `src/static/index.html`),
       con selector de nivel JLPT e idioma de traducción
+- [x] Página de vocabulario WaniKani (`src/static/wanikani.html`,
+      `/wanikani/words`), navegación cargando la palabra en `/app`
 - [ ] Modelo de datos (words, cards, reviews) en SQLite
 - [ ] Loop FSRS completo

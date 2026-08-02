@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WaniKani — Kotonoha 言の葉</title>
+  <style>
+    body {
+      font-family: -apple-system, sans-serif;
+      max-width: 600px;
+      margin: 40px auto;
+      padding: 0 20px;
+    }
+    .header { text-align: center; margin-bottom: 16px; }
+    .header h1 { margin: 0; font-size: 1.4rem; }
+    .nav-link {
+      display: block;
+      text-align: center;
+      font-size: 0.85rem;
+      margin-bottom: 16px;
+    }
+    input[type=text] {
+      width: 100%;
+      font-size: 1.1rem;
+      padding: 10px;
+      box-sizing: border-box;
+      margin-bottom: 12px;
+    }
+    select {
+      width: 100%;
+      font-size: 1rem;
+      padding: 10px;
+      margin-bottom: 16px;
+    }
+    .message { color: #666; text-align: center; margin-top: 24px; }
+    .error { color: #c00; text-align: center; margin-top: 24px; }
+    .section { margin-bottom: 24px; }
+    .section summary {
+      font-size: 1.1rem;
+      font-weight: bold;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 4px;
+      margin-bottom: 10px;
+      cursor: pointer;
+    }
+    .section summary .count { color: #888; font-weight: normal; font-size: 0.85rem; }
+    .words {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .words button {
+      font-size: 1rem;
+      padding: 8px 12px;
+      border: 1px solid rgba(0, 0, 0, 0.1);
+      border-radius: 6px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>WaniKani 言の葉</h1>
+  </div>
+  <a class="nav-link" id="app-link" href="/app">← Kotonoha</a>
+
+  <select id="language">
+    <option value="es" selected>Español (México)</option>
+    <option value="en">English (UK)</option>
+    <option value="it">Italiano (Italia)</option>
+    <option value="fr">Français (France)</option>
+  </select>
+
+  <input type="text" id="search" placeholder="..." style="display: none;">
+
+  <div class="message" id="message"></div>
+  <div class="error" id="error"></div>
+  <div id="sections"></div>
+
+  <script>
+    const JLPT_ORDER = ["N5", "N4", "N3", "N2", "N1"];
+
+    // -1 = sin asignación todavía, 0 = lección disponible,
+    // 1-4 = Apprentice, 5-6 = Guru, 7 = Master, 8 = Enlightened, 9 = Burned
+    const STAGE_COLORS = [
+      "#eef2f7", "#dbe7fb", "#c3daf7", "#a8cbf3", "#8cbaee", "#6ea8e8",
+      "#4f93e0", "#3a7fd6", "#2a68c2", "#1c4fa3", "#0f3480",
+    ];
+
+    function srsColor(stage) {
+      const idx = Math.min(Math.max(stage + 1, 0), STAGE_COLORS.length - 1);
+      return STAGE_COLORS[idx];
+    }
+
+    function srsTextColor(stage) {
+      return stage >= 5 ? "#fff" : "#222";
+    }
+
+    const STRINGS = {
+      es: {
+        noApiKey: "No hay API key de WaniKani configurada.",
+        searchPlaceholder: "Buscar palabra...",
+        loading: "Cargando vocabulario...",
+        loadError: "No se pudo cargar el vocabulario de WaniKani.",
+        secretPrompt: "Ingresa el secreto de la app:",
+        secretIncorrect: "Secreto incorrecto, intenta de nuevo.",
+        levels: { N5: "Principiante", N4: "Elemental", N3: "Intermedio", N2: "Intermedio Alto", N1: "Avanzado" },
+      },
+      en: {
+        noApiKey: "No WaniKani API key configured.",
+        searchPlaceholder: "Search word...",
+        loading: "Loading vocabulary...",
+        loadError: "Couldn't load WaniKani vocabulary.",
+        secretPrompt: "Enter the app secret:",
+        secretIncorrect: "Incorrect secret, try again.",
+        levels: { N5: "Beginner", N4: "Elementary", N3: "Intermediate", N2: "Upper Intermediate", N1: "Advanced" },
+      },
+      it: {
+        noApiKey: "Nessuna API key di WaniKani configurata.",
+        searchPlaceholder: "Cerca parola...",
+        loading: "Caricamento vocabolario...",
+        loadError: "Impossibile caricare il vocabolario di WaniKani.",
+        secretPrompt: "Inserisci il segreto dell'app:",
+        secretIncorrect: "Segreto errato, riprova.",
+        levels: { N5: "Principiante", N4: "Elementare", N3: "Intermedio", N2: "Intermedio Avanzato", N1: "Avanzato" },
+      },
+      fr: {
+        noApiKey: "Aucune clé API WaniKani configurée.",
+        searchPlaceholder: "Rechercher un mot...",
+        loading: "Chargement du vocabulaire...",
+        loadError: "Impossible de charger le vocabulaire WaniKani.",
+        secretPrompt: "Entrez le secret de l'application :",
+        secretIncorrect: "Secret incorrect, réessayez.",
+        levels: { N5: "Débutant", N4: "Élémentaire", N3: "Intermédiaire", N2: "Intermédiaire Supérieur", N1: "Avancé" },
+      },
+    };
+
+    let allWords = [];
+
+    function currentLanguage() {
+      return document.getElementById("language").value;
+    }
+
+    function getSecret() {
+      let secret = localStorage.getItem("appSecret");
+      if (!secret) {
+        secret = prompt(STRINGS[currentLanguage()].secretPrompt);
+        if (secret) localStorage.setItem("appSecret", secret);
+      }
+      return secret;
+    }
+
+    function renderWords(words) {
+      const sectionsEl = document.getElementById("sections");
+      sectionsEl.innerHTML = "";
+      const language = currentLanguage();
+      const levels = STRINGS[language].levels;
+
+      for (const jlptLevel of JLPT_ORDER) {
+        const levelWords = words.filter((w) => w.jlpt_level === jlptLevel);
+        if (!levelWords.length) continue;
+
+        const sectionEl = document.createElement("details");
+        sectionEl.className = "section";
+        sectionEl.open = false;
+
+        const summaryEl = document.createElement("summary");
+        summaryEl.textContent = `${jlptLevel} - ${levels[jlptLevel]} `;
+        const countEl = document.createElement("span");
+        countEl.className = "count";
+        countEl.textContent = `(${levelWords.length})`;
+        summaryEl.appendChild(countEl);
+        sectionEl.appendChild(summaryEl);
+
+        const wordsEl = document.createElement("div");
+        wordsEl.className = "words";
+        for (const item of levelWords) {
+          const btn = document.createElement("button");
+          btn.textContent = item.word;
+          btn.style.backgroundColor = srsColor(item.srs_stage);
+          btn.style.color = srsTextColor(item.srs_stage);
+          btn.addEventListener("click", () => {
+            const params = new URLSearchParams({
+              word: item.word,
+              level: item.jlpt_level,
+              lang: language,
+              autorun: "1",
+            });
+            window.location.href = `/app?${params.toString()}`;
+          });
+          wordsEl.appendChild(btn);
+        }
+        sectionEl.appendChild(wordsEl);
+        sectionsEl.appendChild(sectionEl);
+      }
+    }
+
+    function applyFilter() {
+      const query = document.getElementById("search").value.trim();
+      const filtered = query ? allWords.filter((w) => w.word.includes(query)) : allWords;
+      renderWords(filtered);
+    }
+
+    async function loadWords() {
+      const strings = STRINGS[currentLanguage()];
+      const messageEl = document.getElementById("message");
+      const errorEl = document.getElementById("error");
+      const searchEl = document.getElementById("search");
+      messageEl.textContent = strings.loading;
+      errorEl.textContent = "";
+      searchEl.style.display = "none";
+      document.getElementById("sections").innerHTML = "";
+
+      const secret = getSecret();
+      if (!secret) {
+        messageEl.textContent = "";
+        return;
+      }
+
+      try {
+        const res = await fetch("/wanikani/words", {
+          headers: { "X-App-Secret": secret },
+        });
+
+        if (res.status === 401) {
+          localStorage.removeItem("appSecret");
+          messageEl.textContent = "";
+          errorEl.textContent = strings.secretIncorrect;
+          return;
+        }
+        if (res.status === 404) {
+          messageEl.textContent = strings.noApiKey;
+          return;
+        }
+        if (!res.ok) {
+          messageEl.textContent = "";
+          errorEl.textContent = `${strings.loadError} (${res.status})`;
+          return;
+        }
+
+        const data = await res.json();
+        allWords = data.words;
+        messageEl.textContent = "";
+        searchEl.placeholder = strings.searchPlaceholder;
+        searchEl.style.display = "block";
+        renderWords(allWords);
+      } catch (e) {
+        messageEl.textContent = "";
+        errorEl.textContent = strings.loadError;
+      }
+    }
+
+    function initLanguageFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      const lang = params.get("lang") || localStorage.getItem("appLanguage");
+      if (lang && STRINGS[lang]) {
+        document.getElementById("language").value = lang;
+      }
+    }
+
+    function updateAppLink() {
+      document.getElementById("app-link").href = `/app?lang=${encodeURIComponent(currentLanguage())}`;
+    }
+
+    document.getElementById("language").addEventListener("change", () => {
+      localStorage.setItem("appLanguage", currentLanguage());
+      updateAppLink();
+      loadWords();
+    });
+    document.getElementById("search").addEventListener("input", applyFilter);
+
+    initLanguageFromUrl();
+    updateAppLink();
+    loadWords();
+  </script>
+</body>
+</html>
