@@ -1,7 +1,10 @@
 import os
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, Header, HTTPException
 
 app = FastAPI()
+
+APP_SECRET = os.getenv("APP_SECRET")
+DB_PATH = os.getenv("DB_PATH", "./jp_srs.db")
 
 SYSTEM = (
     "Eres un profesor de japonés especializado en preparación JLPT N2. "
@@ -45,11 +48,16 @@ else:
         return "\n".join(out)
 
 
+def require_app_secret(x_app_secret: str | None = Header(default=None, alias="X-App-Secret")):
+    if not APP_SECRET or x_app_secret != APP_SECRET:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
 @app.get("/")
 def root():
     return {"status": "ok", "backend": "api_key" if USE_API_KEY else "claude_code"}
 
-@app.get("/sentence")
+@app.get("/sentence", dependencies=[Depends(require_app_secret)])
 async def sentence(word: str = "契約"):
     return {"output": await generate(build_prompt(word))}
 
