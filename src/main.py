@@ -49,15 +49,21 @@ app = FastAPI()
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 
-SYSTEM = (
-    "Eres un profesor de japonés especializado en preparación JLPT N2. "
-    "Generas oraciones de ejemplo usando SOLO vocabulario y gramática "
-    "de nivel N2 o inferior (N3, N4, N5), nunca N1. "
-    "Respondes ÚNICAMENTE con un objeto JSON válido, sin texto antes ni "
-    "después, sin markdown, sin backticks."
-)
+JLPT_LEVELS = {"N1", "N2", "N3", "N4", "N5"}
+LANGUAGES = {"es": "español", "en": "inglés", "it": "italiano", "fr": "francés"}
 
-def build_prompt(word: str) -> str:
+def build_system(level: str) -> str:
+    return (
+        f"Eres un profesor de japonés especializado en preparación JLPT {level}. "
+        f"Generas oraciones de ejemplo usando SOLO vocabulario y gramática "
+        f"de nivel {level} o más fácil (JLPT va de N5, el nivel más fácil, "
+        f"a N1, el más difícil), nunca vocabulario de un nivel más difícil que {level}. "
+        "Respondes ÚNICAMENTE con un objeto JSON válido, sin texto antes ni "
+        "después, sin markdown, sin backticks."
+    )
+
+def build_prompt(word: str, language: str) -> str:
+    lang_name = LANGUAGES[language]
     return (
         f"Palabra objetivo: {word}\n\n"
         "Genera una oración de ejemplo usando esta palabra. "
@@ -65,7 +71,7 @@ def build_prompt(word: str) -> str:
         "{\n"
         '  "sentence": "oración completa en japonés con kanji",\n'
         '  "furigana": "misma oración con lectura en hiragana",\n'
-        '  "translation": "traducción al español",\n'
+        f'  "translation": "traducción al {lang_name}",\n'
         '  "note": "nota breve sobre uso o matiz gramatical, o null si no aplica"\n'
         "}"
     )
@@ -95,8 +101,12 @@ def serve_app():
     return FileResponse(os.path.join(STATIC_DIR, "index.html"))
 
 @app.get("/sentence", dependencies=[Depends(check_auth)])
-async def sentence(word: str = "契約"):
-    raw = await generate(build_prompt(word), SYSTEM)
+async def sentence(word: str = "契約", level: str = "N5", language: str = "es"):
+    if level not in JLPT_LEVELS:
+        raise HTTPException(status_code=400, detail=f"level inválido, debe ser uno de {sorted(JLPT_LEVELS)}")
+    if language not in LANGUAGES:
+        raise HTTPException(status_code=400, detail=f"language inválido, debe ser uno de {sorted(LANGUAGES)}")
+    raw = await generate(build_prompt(word, language), build_system(level))
     try:
         return parse_response(raw)
     except json.JSONDecodeError:

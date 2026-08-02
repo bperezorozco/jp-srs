@@ -1,8 +1,9 @@
 # jp-srs
 
-App personal de vocabulario JLPT N2 con oraciones generadas por LLM y
+App personal de vocabulario JLPT con oraciones generadas por LLM y
 repetición espaciada (FSRS). Sesgo de contenido hacia vocabulario
-corporativo y de seguros.
+corporativo y de seguros. Nivel JLPT (N1-N5) e idioma de traducción
+(es/en/it/fr) son seleccionables por el usuario, no fijos.
 
 ## Arquitectura
 
@@ -30,6 +31,11 @@ corporativo y de seguros.
 ```json ``` por hábito, pero el prompt pide explícitamente que no lo haga.
 - Todo output se cachea en SQLite antes de mostrarse; nunca regenerar
   una palabra ya generada.
+- `/sentence` acepta `level` (N1-N5, default N5) y `language` (es/en/it/fr,
+  default es) como query params. `build_system(level)` restringe el
+  vocabulario/gramática al nivel pedido (o más fácil); `build_prompt(word,
+  language)` pide la traducción en el idioma pedido. Valores inválidos
+  devuelven 400, nunca se le pasan al modelo sin validar.
 
 ## Seguridad
 
@@ -62,13 +68,18 @@ corporativo y de seguros.
 - Sin over-engineering: es una app personal de un solo usuario, no un
   producto para terceros. Preferir simple y funcional sobre "correcto"
   en abstracto.
+- Todo texto en inglés (UI, labels, contenido generado cuando `language=en`)
+  debe usar inglés británico (ej. "personalised", no "personalized").
+- Todo texto en español (UI, labels, contenido generado cuando `language=es`)
+  debe usar español mexicano.
 
 ## Estado actual (actualizar a medida que avance)
 
 - [x] Dev environment, git, deploy en Railway
 - [x] Backend dual funcionando
 - [x] Auth básica por secreto
-- [ ] Generación en JSON estricto (en progreso)
+- [x] Generación en JSON estricto
+- [x] Frontend mínimo (input palabra → oración, `src/static/index.html`),
+      con selector de nivel JLPT e idioma de traducción
 - [ ] Modelo de datos (words, cards, reviews) en SQLite
-- [ ] Frontend mínimo (input palabra → oración)
 - [ ] Loop FSRS completo
