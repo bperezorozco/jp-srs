@@ -49,10 +49,12 @@ corporativo y de seguros. Nivel JLPT (N1-N5) e idioma de traducción
   automáticamente.
 - `/wanikani/words` (protegido por `X-App-Secret`, igual que `/sentence`)
   usa `WANIKANI_API_KEY` para pegarle a la API v2 de WaniKani: `GET
-  /subjects?types=vocabulary` para las palabras + nivel WK, y `GET
-  /assignments?subject_types=vocabulary` para el SRS stage actual de
-  cada una. Si la env var no está seteada, devuelve 404 y el frontend
-  muestra "No hay API key" en el idioma seleccionado.
+  /subjects?types=vocabulary,kana_vocabulary` para las palabras + nivel
+  WK (incluye tanto vocabulario con kanji como vocabulario solo-kana,
+  ej. ばかり), y `GET /assignments?subject_types=vocabulary,kana_vocabulary`
+  para el SRS stage actual de cada una. Si la env var no está seteada,
+  devuelve 404 y el frontend muestra "No hay API key" en el idioma
+  seleccionado.
 - `wanikani_level_to_jlpt()` mapea nivel WaniKani (1-60) a nivel JLPT
   (N5-N1) con una heurística aproximada (no oficial, WaniKani no expone
   JLPT directamente): 1-10→N5, 11-20→N4, 21-33→N3, 34-44→N2, 45-60→N1.

@@ -130,7 +130,7 @@ async def fetch_wanikani_subjects(client: httpx.AsyncClient) -> list[dict]:
     if _wanikani_subjects_cache is not None:
         return _wanikani_subjects_cache
 
-    raw = await _paginate(client, "https://api.wanikani.com/v2/subjects?types=vocabulary")
+    raw = await _paginate(client, "https://api.wanikani.com/v2/subjects?types=vocabulary,kana_vocabulary")
     _wanikani_subjects_cache = [
         {"id": s["id"], "word": s["data"]["characters"], "level": s["data"]["level"]}
         for s in raw
@@ -139,7 +139,7 @@ async def fetch_wanikani_subjects(client: httpx.AsyncClient) -> list[dict]:
     return _wanikani_subjects_cache
 
 async def fetch_wanikani_srs_stages(client: httpx.AsyncClient) -> dict[int, int]:
-    raw = await _paginate(client, "https://api.wanikani.com/v2/assignments?subject_types=vocabulary")
+    raw = await _paginate(client, "https://api.wanikani.com/v2/assignments?subject_types=vocabulary,kana_vocabulary")
     return {a["data"]["subject_id"]: a["data"]["srs_stage"] for a in raw}
 
 async def fetch_wanikani_words() -> list[dict]:
