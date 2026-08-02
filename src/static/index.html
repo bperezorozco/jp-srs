@@ -118,6 +118,8 @@
       },
     };
 
+    const HEADLINE_JA = "あなたのレベルに合わせた、パーソナル語彙学習パートナー";
+
     const LEVEL_LABELS = {
       es: { N5: "Principiante", N4: "Elemental", N3: "Intermedio", N2: "Intermedio Alto", N1: "Avanzado" },
       en: { N5: "Beginner", N4: "Elementary", N3: "Intermediate", N2: "Upper Intermediate", N1: "Advanced" },
@@ -128,7 +130,7 @@
     function updateTagline() {
       const language = document.getElementById("language").value;
       const tagline = TAGLINES[language];
-      document.getElementById("headline").textContent = tagline.headline;
+      document.getElementById("headline").innerHTML = `${HEADLINE_JA}<br>${tagline.headline}`;
       document.getElementById("poem-translated").innerHTML = tagline.verse.join("<br>");
 
       const levels = LEVEL_LABELS[language];
