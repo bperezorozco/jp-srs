@@ -1,8 +1,8 @@
 # jp-srs
 
 App personal de vocabulario JLPT con oraciones generadas por LLM y
-repetición espaciada (FSRS). Sesgo de contenido hacia vocabulario
-corporativo y de seguros. Nivel JLPT (N1-N5) e idioma de traducción
+repetición espaciada (FSRS). Vocabulario de propósito general, sin
+sesgo temático. Nivel JLPT (N1-N5) e idioma de traducción
 (es/en/it/fr) son seleccionables por el usuario, no fijos.
 
 ## Arquitectura
@@ -29,6 +29,12 @@ corporativo y de seguros. Nivel JLPT (N1-N5) e idioma de traducción
   guardar o mostrar en tarjetas.
 - `parse_response()` tolera que el modelo envuelva la salida en
 ```json ``` por hábito, pero el prompt pide explícitamente que no lo haga.
+- BUG CONOCIDO (detectado por el eval, ítem `a01`): si el modelo antepone
+  prosa antes del JSON, `parse_response()` truena y `/sentence` devuelve
+  502. Pasa cuando el input tiene restricciones en conflicto (palabra N1
+  pedida en nivel N5): el modelo explica la contradicción antes de
+  responder. Sin arreglar todavía a propósito — se arregla y se vuelve a
+  correr el eval con tag nuevo, para tener la comparación baseline vs fix.
 - Todo output se cachea en SQLite antes de mostrarse; nunca regenerar
   una palabra ya generada.
 - `/sentence` acepta `level` (N1-N5, default N5) y `language` (es/en/it/fr,
@@ -80,6 +86,45 @@ corporativo y de seguros. Nivel JLPT (N1-N5) e idioma de traducción
   además del query param `?lang=`, para que se mantenga al navegar
   entre `/app`, `/wanikani` y `/wanikani-kanji`.
 
+## Evals
+
+Suite en `evals/` para evaluar la generación de oraciones. Ver
+`evals/README.md` para el spec completo y los criterios de ship.
+
+- Tres capas de grading, de barata a cara: checks determinísticos
+  (`rubric.automatic_checks`), etiquetado humano (`label.py`), y
+  LLM-as-judge (`judge.py`, pendiente). REGLA: nada que se pueda
+  decidir con código va a un juez LLM, y el juez no se usa hasta
+  haber medido su acuerdo (Cohen's kappa) contra etiquetas humanas.
+- `run.py` importa `build_system`/`build_prompt`/`parse_response`/
+  `generate` de `src/main.py`. NUNCA duplicar esa lógica en `evals/`:
+  si divergen, el eval mide un sistema que no existe. `src/main.py`
+  expone `MODEL` solo para que las corridas registren procedencia.
+- `dataset.py` es un golden set CONGELADO (n=20, `DATASET_VERSION`).
+  No se jala de la API de WaniKani en tiempo de corrida — si el
+  dataset cambia entre corridas, los números dejan de ser comparables.
+  Si le agregas ítems, sube `DATASET_VERSION`.
+- Las corridas son artefactos inmutables: `run.py` se niega a
+  sobrescribir un tag existente. Todo va a `evals/results/`, versionado
+  en git, más un `.meta.json` con modelo, fingerprint del prompt y
+  versión del dataset.
+- Criterios binarios, nunca escalas 1-5 (no calibran ni en humanos ni
+  en modelos). Cuatro respuestas posibles: sí, no, `u` (entendí y aun
+  así no me decido → el criterio está mal escrito), `x` (arriba de mi
+  nivel de japonés → límite de cobertura). `u` y `x` nunca entran a una
+  tasa ni al kappa y se reportan por separado: significan cosas
+  distintas y confundirlas manda a reescribir una rúbrica que estaba bien.
+- El anotador no es nivel N1. Adivinar en vez de marcar `x` no produce
+  ruido, produce sesgo sistemático — y un juez validado contra esas
+  etiquetas reproduce los errores y reporta acuerdo alto.
+- `label.py` NO le muestra los checks automáticos al anotador: ver el
+  veredicto de la máquina lo ancla, y contamina el acuerdo que se mide
+  después.
+- `report.py` siempre reporta intervalos de Wilson. Con n=20 el margen
+  es de ~±20pp: casi cualquier "mejora" a este tamaño de muestra es
+  ruido. Las métricas por slice (4-5 ítems) son cualitativas, nunca se
+  citan como porcentaje.
+
 ## Seguridad
 
 - Endpoint `/sentence` protegido por header `X-App-Secret`, comparado
@@ -109,8 +154,10 @@ corporativo y de seguros. Nivel JLPT (N1-N5) e idioma de traducción
 
 ## Estilo de código
 
-- Nombres de variables/funciones en inglés, comments en español/inglés
-  según convenga
+- Nombres de variables/funciones en inglés. TODO comentario, docstring
+  y documentación de código va en inglés (británico), sin excepción.
+  El español se reserva para texto de cara al usuario (UI, labels,
+  contenido generado cuando `language=es`) y para este CLAUDE.md.
 - Sin over-engineering: es una app personal de un solo usuario, no un
   producto para terceros. Preferir simple y funcional sobre "correcto"
   en abstracto.
@@ -130,5 +177,13 @@ corporativo y de seguros. Nivel JLPT (N1-N5) e idioma de traducción
 - [x] Páginas de vocabulario y kanji de WaniKani (`src/static/wanikani.html`
       + `wanikani-kanji.html`, `/wanikani/words` + `/wanikani/kanji`),
       navegación cargando la palabra/kanji en `/app`
+- [x] Suite de evals, capas 1 y 2 (`evals/`): golden set congelado,
+      harness con procedencia, checks automáticos, CLI de etiquetado,
+      reporte con intervalos de Wilson. Corrida `baseline` hecha.
+- [ ] Etiquetado humano de la corrida `baseline` (20 ítems)
+- [ ] Arreglar `parse_response()` ante prosa antes del JSON + correr
+      eval con tag nuevo para comparar contra `baseline`
+- [ ] Capa 3: `judge.py` (LLM-as-judge) + `agreement.py` (Cohen's kappa
+      contra las etiquetas humanas)
 - [ ] Modelo de datos (words, cards, reviews) en SQLite
 - [ ] Loop FSRS completo

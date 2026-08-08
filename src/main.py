@@ -21,10 +21,12 @@ USE_API_KEY = bool(os.getenv("ANTHROPIC_API_KEY"))
 if USE_API_KEY:
     from anthropic import Anthropic
     _client = Anthropic()
+    # Exposed so eval runs can record which model produced their outputs.
+    MODEL = "claude-sonnet-4-6"
 
     async def generate(prompt: str, system: str) -> str:
         msg = _client.messages.create(
-            model="claude-sonnet-4-6",
+            model=MODEL,
             max_tokens=500,
             system=system,
             messages=[{"role": "user", "content": prompt}],
@@ -32,6 +34,9 @@ if USE_API_KEY:
         return msg.content[0].text
 else:
     from claude_agent_sdk import query, ClaudeAgentOptions, AssistantMessage, TextBlock
+
+    # Whatever model the local Claude Code session is running; not pinned here.
+    MODEL = "claude-code-session"
 
     async def generate(prompt: str, system: str) -> str:
         options = ClaudeAgentOptions(system_prompt=system, max_turns=1, allowed_tools=[])
@@ -107,9 +112,9 @@ def check_auth(x_app_secret: str = Header(None)):
 WANIKANI_API_KEY = os.getenv("WANIKANI_API_KEY")
 WANIKANI_HEADERS = {"Authorization": f"Bearer {WANIKANI_API_KEY}"}
 
-# Correspondencia aproximada nivel WaniKani (1-60) -> nivel JLPT.
-# WaniKani no expone nivel JLPT directamente; esto es una heurística
-# basada en el consenso de la comunidad, no una fuente oficial.
+# Approximate mapping from WaniKani level (1-60) to JLPT level.
+# WaniKani does not expose JLPT levels directly; this is a heuristic
+# based on community consensus, not an official source.
 def wanikani_level_to_jlpt(level: int) -> str:
     if level <= 10:
         return "N5"
@@ -134,9 +139,9 @@ async def _paginate(client: httpx.AsyncClient, url: str) -> list[dict]:
 WANIKANI_VOCAB_TYPES = "vocabulary,kana_vocabulary"
 WANIKANI_KANJI_TYPES = "kanji"
 
-# Los subjects (palabras/kanji + nivel WK) cambian muy poco -> se cachean
-# en memoria, por tipo. Los assignments (progreso SRS) cambian con cada
-# review del usuario, así que esos se piden frescos en cada request.
+# Subjects (words/kanji + WK level) rarely change, so they are cached in
+# memory, keyed by type. Assignments (SRS progress) change with every
+# review the user does, so those are fetched fresh on each request.
 _wanikani_subjects_cache: dict[str, list[dict]] = {}
 
 async def fetch_wanikani_subjects(client: httpx.AsyncClient, types: str) -> list[dict]:
@@ -165,7 +170,7 @@ async def fetch_wanikani_items(types: str) -> list[dict]:
         {
             "word": s["word"],
             "jlpt_level": wanikani_level_to_jlpt(s["level"]),
-            # -1 = todavía no asignada (nivel no alcanzado en WaniKani)
+            # -1 = not assigned yet (level not reached in WaniKani)
             "srs_stage": srs_stages.get(s["id"], -1),
         }
         for s in subjects
